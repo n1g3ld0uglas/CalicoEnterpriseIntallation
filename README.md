@@ -46,7 +46,7 @@ kubectl create secret generic tigera-pull-secret \
     --from-file=.dockerconfigjson=<path/to/pull/secret>
 ```
 
-If using a private registry, use your private registry credentials instead: <br/>
+If using a ```PRIVATE REGISTRY```, use your private registry credentials instead: <br/>
 https://docs.tigera.io/v3.10/getting-started/private-registry/private-registry-regular
 
 ## Push Calico Enterprise images to your private registry
@@ -237,7 +237,7 @@ sed -ie "s?quay.io?$PRIVATE_REGISTRY?g" tigera-operator.yaml
 ```
 
 Next, ensure that an image pull secret has been configured for your custom registry. <br/>
-Set the enviroment variable PRIVATE_REGISTRY_PULL_SECRET to the secret name. <br/>
+Set the enviroment variable ```PRIVATE_REGISTRY_PULL_SECRET``` to the secret name. <br/>
 Then add the image pull secret to the operator deployment spec:
 
 ```
@@ -261,4 +261,111 @@ Before applying ```custom-resources.yaml```, modify registry references to use y
 
 ```
 sed -ie "s?quay.io?$PRIVATE_REGISTRY?g" custom-resources.yaml
+```
+
+## Configure the operator to use images from your private registry:
+
+Set the ```spec.registry``` field of your Installation resource to the name of your custom registry. For example:
+
+```
+apiVersion: operator.tigera.io/v1
+kind: Installation
+metadata:
+  name: default
+spec:
+  variant: TigeraSecureEnterprise
+  imagePullSecrets:
+    - name: tigera-pull-secret
+  registry: myregistry.com
+```
+
+## Monitoring Install Progress
+
+You can now monitor progress with the following command:
+
+```
+watch kubectl get tigerastatus
+```
+
+Wait until the ```apiserver``` shows a status of ```Available```, then proceed to the next section.
+
+## Install the Calico Enterprise license:
+
+In order to use Calico Enterprise, you must install the license provided to you by Nigel:
+
+```
+kubectl create -f </path/to/license.yaml>
+```
+
+Again, you can monitor progress with the following command:
+
+```
+watch kubectl get tigerastatus
+```
+
+When all components show a status of ```Available```, proceed to the next section.
+
+## Secure Calico Enterprise with network policy:
+
+To secure Calico Enterprise component communications, install the following set of network policies:
+
+```
+kubectl create -f https://docs.tigera.io/manifests/tigera-policies.yaml
+```
+
+## Configure access to Calico Enterprise Manager UI:
+
+We agreed to configure your cluster with an ingress controller to implement the Ingress resource: <br/>
+https://docs.tigera.io/getting-started/cnx/access-the-manager<br/>
+<br/>
+
+
+```
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+ annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/backend-protocol: HTTPS
+ creationTimestamp: "2021-09-30T13:08:38Z"
+ generation: 9
+ name: tigera-manager
+ namespace: tigera-manager
+ resourceVersion: "2341835"
+ uid: f05ddf42-967f-4675-9fb5-66458d795148
+spec:
+ rules:
+ - host: azuwevelcbaksd001.velux.org
+   http:
+     paths:
+     - backend:
+         service:
+           name: tigera-manager
+           port:
+             number: 9443
+       path: /
+       pathType: Prefix
+```
+
+Our outstanding update for the Ingress manifest is to expose a specific URI: <br/>
+```domain.com/Tigera/policies/tiered``` instead of ```domain.com/policies/tiered```
+
+## Authentication Quickstart:
+
+Get started quickly with our default token authentication to log in to Calico Enterprise Manager UI and Kibana: <br/>
+https://docs.tigera.io/getting-started/cnx/authentication-quickstart
+
+#### Log in to Calico Enterprise Manager:
+
+First, create the service account ```Jinhong``` in the desired namespace:
+
+```
+kubectl create sa Jinhong -n default
+```
+
+Give the service account permissions to access the Calico Enterprise Manager UI, and a Calico Enterprise cluster role:
+
+```
+kubectl create clusterrolebinding <binding_name> --clusterrole <role_name> --serviceaccount <namespace>:<service_account>
+
 ```
