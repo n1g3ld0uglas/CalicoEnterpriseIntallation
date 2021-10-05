@@ -332,10 +332,10 @@ metadata:
  name: tigera-manager
  namespace: tigera-manager
  resourceVersion: "2341835"
- uid: f05ddf42-967f-4675-9fb5-66458d795148
+ uid: f05ddf42-967f-4675-9fb5-123456789
 spec:
  rules:
- - host: azuwevelcbaksd001.velux.org
+ - host: test.company.org
    http:
      paths:
      - backend:
@@ -348,7 +348,7 @@ spec:
 ```
 
 Our outstanding update for the Ingress manifest is to expose a specific URI: <br/>
-```domain.com/Tigera/policies/tiered``` instead of ```domain.com/policies/tiered```
+```company.org/Tigera/policies/tiered``` instead of ```company.org/policies/tiered```
 
 ## Authentication Quickstart:
 
@@ -366,6 +366,74 @@ kubectl create sa Jinhong -n default
 Give the service account permissions to access the Calico Enterprise Manager UI, and a Calico Enterprise cluster role:
 
 ```
-kubectl create clusterrolebinding <binding_name> --clusterrole <role_name> --serviceaccount <namespace>:<service_account>
+kubectl create clusterrolebinding jinhong-access --clusterrole tigera-network-admin --serviceaccount default:jinhong
+```
 
+Next, get the token from the service account. Using the running example of a service account named, ```jinhong``` in the default namespace:
+
+```
+kubectl get secret $(kubectl get serviceaccount jinhong -o jsonpath='{range .secrets[*]}{.name}{"\n"}{end}' | grep token) -o go-template='{{.data.token | base64decode}}' && echo
+```
+
+#### Log in to Kibana:
+
+Connect to Kibana with the ```elastic``` username. Use the following command to decode the password:
+
+```
+kubectl -n tigera-elasticsearch get secret tigera-secure-es-elastic-user -o go-template='{{.data.elastic | base64decode}}' && echo
+```
+
+## Configure an external identity provider
+Configure Azure AD Identity Provider (IdP) ro create a user, and log in to Calico Enterprise Manager UI: <br/>
+https://docs.tigera.io/getting-started/cnx/configure-identity-provider <br/>
+<br/>
+
+Apply the Authentication CR to your cluster to let the operator configure your login. <br/> 
+The following example uses the email claim - I need to test to confirm this works for Azure AD <br/>
+The email field from the JWT (created by your IdP), is used as the username for binding privileges.
+
+```
+apiVersion: operator.tigera.io/v1
+kind: Authentication
+metadata:
+  name: tigera-secure
+spec:
+  managerDomain: https://<domain-of-manager-ui>
+  oidc:
+    issuerURL: <your-idp-issuer>
+    usernameClaim: email
+```
+
+Apply the secret to your cluster with your OIDC credentials. <br/>
+To get the values, consult the documentation of your provider.
+
+```
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tigera-oidc-credentials
+  namespace: tigera-operator
+data:
+  clientID: <your-base64-clientid>
+  clientSecret: <your-base64-clientid-secret>
+```
+
+#### Grant user login privileges:
+
+For admin users, apply this cluster role.
+
+```
+kubectl create clusterrolebinding <user>-tigera-network-admin --user=<user> --clusterrole=tigera-network-admin
+```
+
+For basic users with view-only permissions, apply this role.
+
+```
+kubectl create clusterrolebinding <user>-tigera-ui-user --user=<user> --clusterrole=tigera-ui-user
+```
+
+Or use the groups flag to assign cluster role to a group of users.
+
+```
+kubectl create clusterrolebinding all-developers-tigera-ui-user --groups=<group> --clusterrole=tigera-ui-user
 ```
